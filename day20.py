@@ -68,6 +68,8 @@ In this example, particles 0, 1, and 2 are simultaneously destroyed at the time 
 How many particles are left after all collisions are resolved?
 '''
 import math
+from functools import reduce
+from collections import defaultdict
 
 class Particle:
     def __init__(self, line):
@@ -1093,6 +1095,8 @@ p=<992,1365,-2469>, v=<150,192,-352>, a=<-12,-12,30>
 p=<-2241,1405,-737>, v=<-318,200,-100>, a=<23,-14,7>
 '''
 
+test_input = '''p=< 3,0,0>, v=< 2,0,0>, a=<-1,0,0>
+p=< 4,0,0>, v=< 0,0,0>, a=<-2,0,0>'''
 
 def puzzle1(puzzle_input):
     particles = [Particle(line) for line in puzzle_input.splitlines()]
@@ -1112,14 +1116,21 @@ def puzzle1(puzzle_input):
 print("The result for puzzle1 is: {}".format(puzzle1(puzzle_input)))
 
 def solve_quadratic(a,b,c):
+    if a == 0 and b == 0:
+        return set()
+
+    if a == 0:
+        return {-c / b}
+
+
     d = b**2 - 4*a*c
     if d < 0:
-        return None
+        return set()
     elif d == 0:
-        return -b / 2
+        return {-b / 2}
     else:
         root_d = math.sqrt(d)
-        return ((-b + root_d) /2, (-b -root_d) /2)
+        return {(-b + root_d) /(2*a), (-b -root_d) / (2*a)}
 
 
 def solve_quadratic_3d(a, b, c):
@@ -1127,8 +1138,19 @@ def solve_quadratic_3d(a, b, c):
     assert len(a) == 3
     assert len(a) == 3
 
+    solutions = []
+
     for axis in range(3):
-        solve_quadratic(a[axis], b[axis], c[axis])
+        # if all values are 0, the equation is true for all values.
+        # in that case we ignore this axis. This means that this function
+        # isn't really correct when the equation is true for all values for
+        # each axis because we will return that there are not values for which
+        # the equation is true for all axes. As this is noth a math library
+        # we will take accept this.
+        if not (a[axis] == 0 and b[axis] == 0 and c[axis] == 0):
+            solutions.append(solve_quadratic(a[axis], b[axis], c[axis]))
+
+    return reduce((lambda a, b: a.intersection(b)), solutions)
 
 def get_clash_times(particle1, particle2):
     '''The position of a particle at time t is given by
@@ -1141,18 +1163,46 @@ def get_clash_times(particle1, particle2):
     0.5(A1-A2) T**2 + (0.5(A1-a2) + (V(0)1-V(0)2) * T + (P(0)1 - p(0)2) = 0
     which we can do with the ABC formula!
     where
-    a = (A1-A2)
+    a = 0.5*(A1-A2)
     b = (0.5 * (A1-A2)) + V(0)1 - V(0)2
     c = P(0)1 - P(0)2'''
-    #a = particle1.
-    return
+    a = [0.5 * (particle1.acceleration[i] - particle2.acceleration[i]) for i in range(3)]
+    b = [a[i] + particle1.velocity[i] - particle2.velocity[i] for i in range(3)]
+    c = [particle1.position[i] - particle2.position[i] for i in range(3)]
+    return solve_quadratic_3d(a,b,c)
 
 def puzzle2(puzzle_input):
-    # try 1: just assume that we will find all collisions in 1000 steps
     particles = [Particle(line) for line in puzzle_input.splitlines()]
-    #for i in range(1000):
-    #   clashes =
+    potential_collision = defaultdict(list)
 
+    # first get all the times at which there is a potential clash
+    # we can't remove particles here, because even though particle A and B
+    # may potentially clash at t=T, this will not happen if particle A already
+    # clashed with particle C at t=T-x
+    for i in range(len(particles)):
+        for particle2 in particles[i+1:]:
+            times = get_clash_times(particles[i], particle2)
+            for time in times:
+                potential_collision[time].append((particles[i], particle2))
 
+    # Now we have all the times at which clashes can occur. Now check if clashes actually occur
+    # Starting at the lowest possible clash times we check which paticles clash at that time.
+    # all clasing particles are removed from our collection of particles (they explode) before
+    # we go on to the next time.
+    #collision_times = [int(time) for time in collision_times]
+    #collision_times.sort()
+    potential_collision_times = list(potential_collision.keys())
+    potential_collision_times.sort()
+    for time in potential_collision_times:
+        clashed_particles = set()
+        for p1, p2 in potential_collision[time]:
+            # if both particles still exist, they will clash
+            if p1 in particles and p2 in particles:
+                clashed_particles.add(p1)
+                clashed_particles.add(p2)
+        for particle in clashed_particles:
+            particles.remove(particle)
 
-print(solve_quadratic(0,0,0))
+    return len(particles)
+
+print("The solution for puzzle 2 is {}".format(puzzle2(puzzle_input)))
